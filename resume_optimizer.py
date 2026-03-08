@@ -1,4 +1,4 @@
-# resume_optimizer.py - Stage 3: OpenAI integration
+# resume_optimizer.py - Stage 5: Resume Optimization
 
 # Import necessary libraries and modules
 import os
@@ -130,6 +130,51 @@ Be specific and actionable. Focus on concrete skills, keywords, and experience m
         print(f"Error calling OpenAI API: {e}")
         return None
 
+def generate_optimized_resume(resume_text, job_description, analysis):
+    """Use GPT-4 to generate an optimized version of the resume"""
+    
+    prompt = f"""You are an expert resume writer. Based on the analysis below, rewrite this resume to better match the job description.
+
+ORIGINAL RESUME:
+{resume_text}
+
+JOB DESCRIPTION:
+{job_description}
+
+ANALYSIS:
+- Missing keywords: {', '.join(analysis['keywords_missing'])}
+- Gaps: {', '.join(analysis['gaps'])}
+- Recommendations: {', '.join(analysis['recommendations'])}
+
+INSTRUCTIONS:
+1. Keep the same structure and format as the original
+2. Incorporate missing keywords naturally where honest and relevant
+3. Strengthen bullet points based on recommendations
+4. Emphasize skills and experience that align with the job description
+5. Do NOT fabricate experience or skills
+6. Maintain the same tone and voice
+
+Return ONLY the optimized resume text, no explanations or preamble.
+"""
+
+    try:
+        print("Calling OpenAI API for resume optimization...")
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert resume writer who optimizes resumes for ATS systems while maintaining honesty and authenticity."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.5,
+            max_tokens=3000
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        print(f"Error generating optimized resume: {e}")
+        return None
+
 def format_analysis_report(analysis):
     """Format the analysis into a readable report"""
     
@@ -237,11 +282,30 @@ def main():
     # Save report
     save_output(report, "analysis_report.txt")
     
+    # Ask if user wants optimized resume
+    print()
+    generate_opt = input("Generate optimized resume? (y/n): ").strip().lower()
+    
+    if generate_opt == 'y':
+        print("\nGenerating optimized resume...")
+        print("(This may take 30-60 seconds...)")
+        
+        optimized_resume = generate_optimized_resume(resume_text, job_description, analysis)
+        
+        if optimized_resume:
+            print("✓ Optimized resume generated")
+            save_output(optimized_resume, "optimized_resume.txt")
+        else:
+            print("Failed to generate optimized resume.")
+    
+    # Update final output:
     print("\n" + "=" * 80)
     print("COMPLETE!")
     print("=" * 80)
     print("\nOutput files:")
     print("  • analysis_report.txt - Full analysis and recommendations")
+    if generate_opt == 'y':
+        print("  • optimized_resume.txt - AI-optimized version of your resume")
     print()
 
 if __name__ == "__main__":
