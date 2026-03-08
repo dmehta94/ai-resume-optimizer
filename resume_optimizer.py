@@ -130,6 +130,61 @@ Be specific and actionable. Focus on concrete skills, keywords, and experience m
         print(f"Error calling OpenAI API: {e}")
         return None
 
+def format_analysis_report(analysis):
+    """Format the analysis into a readable report"""
+    
+    report = f"""
+{'='*80}
+RESUME ANALYSIS REPORT
+{'='*80}
+
+ATS ALIGNMENT
+-------------
+Score: {analysis['ats_alignment_score']}%
+Summary: {analysis['ats_summary']}
+
+BOOLEAN SEARCH ANALYSIS
+-----------------------
+Boolean String: {analysis['boolean_search_string']}
+
+Boolean Match Score: {analysis['boolean_match_score']}%
+
+Keywords Found:
+{chr(10).join('  ✓ ' + kw for kw in analysis['keywords_found'])}
+
+Keywords Missing:
+{chr(10).join('  ✗ ' + kw for kw in analysis['keywords_missing'])}
+
+STRENGTHS
+---------
+{chr(10).join('  • ' + s for s in analysis['strengths'])}
+
+GAPS
+----
+{chr(10).join('  • ' + g for g in analysis['gaps'])}
+
+RECOMMENDATIONS
+---------------
+{chr(10).join('  ' + str(i+1) + '. ' + r for i, r in enumerate(analysis['recommendations']))}
+
+TARGET BENCHMARKS
+-----------------
+ATS Alignment: Aim for 80-85% for competitive positioning
+Boolean Match: Aim for 75-80% for recruiter visibility
+
+{'='*80}
+"""
+    return report
+
+def save_output(content, filename):
+    """Save content to a file"""
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"✓ Saved: {filename}")
+    except Exception as e:
+        print(f"Error saving file: {e}")
+
 def main():
     """Main execution flow"""
     print("=" * 80)
@@ -168,14 +223,26 @@ def main():
     print("=" * 80)
     
     analysis = analyze_resume(resume_text, job_description)
-    
+
     if not analysis:
         print("Failed to analyze resume. Exiting.")
         return
     
     print("\n✓ Analysis complete!")
-    print("\nRaw JSON output:")
-    print(json.dumps(analysis, indent=2))
+    
+    # Generate and display report
+    report = format_analysis_report(analysis)
+    print(report)
+    
+    # Save report
+    save_output(report, "analysis_report.txt")
+    
+    print("\n" + "=" * 80)
+    print("COMPLETE!")
+    print("=" * 80)
+    print("\nOutput files:")
+    print("  • analysis_report.txt - Full analysis and recommendations")
+    print()
 
 if __name__ == "__main__":
     main()
