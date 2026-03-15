@@ -1,25 +1,55 @@
-# resume_optimizer.py - Stage 5: Resume Optimization
+"""
+AI Resume Optimizer - Production Version
 
-# Import necessary libraries and modules
+Analyzes resumes against job descriptions using OpenAI GPT-4 to identify
+ATS alignment gaps, missing keywords, and optimization opportunities.
+
+Author: Deval Mehta
+Built with: Claude AI (collaboration partner)
+Date: March 2026
+"""
+
 import os
 import sys
+import json
+from typing import Optional, Dict, Any, List
 from openai import OpenAI
 from dotenv import load_dotenv
-import json
 import pdfplumber
 
 # Load environment variables
 load_dotenv()
 
-# Set encoding to UTF-8 for console printout
+# Set encoding to UTF-8 for console output
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-def read_pdf(filepath):
-    """Extract text from a PDF file using pdfplumber"""
+# Configuration constants
+OPENAI_MODEL = "gpt-4"
+ANALYSIS_TEMPERATURE = 0.3
+ANALYSIS_MAX_TOKENS = 2000
+OPTIMIZATION_TEMPERATURE = 0.5
+OPTIMIZATION_MAX_TOKENS = 3000
+
+
+def read_pdf(filepath: str) -> Optional[str]:
+    """
+    Extract text from a PDF file using pdfplumber.
+    
+    Args:
+        filepath: Path to the PDF file to read
+        
+    Returns:
+        Extracted text from all pages, or None if extraction fails
+        
+    Example:
+        >>> text = read_pdf("my_resume.pdf")
+        >>> print(len(text))
+        3247
+    """
     try:
         text = ""
         with pdfplumber.open(filepath) as pdf:
@@ -32,11 +62,30 @@ def read_pdf(filepath):
         print(f"Error reading PDF: {e}")
         return None
 
-def read_file(filepath):
-    """Read text from a file (supports .txt and .pdf)"""
+
+def read_file(filepath: str) -> Optional[str]:
+    """
+    Read text from a file, supporting both .txt and .pdf formats.
+    
+    Automatically detects file type by extension and calls appropriate
+    reader function. For PDFs, uses pdfplumber for text extraction.
+    
+    Args:
+        filepath: Path to the file to read (.txt or .pdf)
+        
+    Returns:
+        File contents as string, or None if reading fails
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist at specified path
+        
+    Example:
+        >>> resume = read_file("my_resume.pdf")
+        >>> print(f"Loaded {len(resume)} characters")
+    """
     try:
         if filepath.lower().endswith('.pdf'):
-            print(f"Detected PDF file, extracting text...")
+            print("Detected PDF file, extracting text...")
             return read_pdf(filepath)
         else:
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -48,13 +97,29 @@ def read_file(filepath):
         print(f"Error reading file: {e}")
         return None
 
-def get_multiline_input(prompt):
-    """Get multiline input from user"""
+
+def get_multiline_input(prompt: str) -> str:
+    """
+    Get multiline input from user via terminal.
+    
+    Prompts user to paste text and type 'DONE' on a new line when finished.
+    Handles both manual typing and copy-paste input.
+    
+    Args:
+        prompt: Message to display to user before input
+        
+    Returns:
+        Combined input from all lines as single string
+        
+    Example:
+        >>> job_desc = get_multiline_input("Paste job description:")
+        >>> print(f"Received {len(job_desc)} characters")
+    """
     print(prompt)
     print("(Paste your text below, then type 'DONE' on a new line when finished)")
     print("-" * 80)
     
-    lines = []
+    lines: List[str] = []
     while True:
         try:
             line = input()
@@ -66,9 +131,36 @@ def get_multiline_input(prompt):
     
     return '\n'.join(lines)
 
-def analyze_resume(resume_text, job_description):
-    """Use GPT-4 to analyze resume against job description"""
+
+def analyze_resume(resume_text: str, job_description: str) -> Optional[Dict[str, Any]]:
+    """
+    Analyze resume against job description using GPT-4.
     
+    Sends resume and job description to OpenAI GPT-4 with a structured prompt
+    requesting JSON output containing ATS scores, keyword analysis, Boolean
+    search strings, and recommendations.
+    
+    Args:
+        resume_text: Full text content of the resume
+        job_description: Full text of the job posting
+        
+    Returns:
+        Dictionary containing analysis results with keys:
+            - ats_alignment_score (int): 0-100 score
+            - ats_summary (str): Explanation of score
+            - boolean_search_string (str): Recruiter search query
+            - boolean_match_score (int): 0-100 score
+            - keywords_found (list): Keywords present in resume
+            - keywords_missing (list): Keywords absent from resume
+            - strengths (list): Resume strengths for this role
+            - gaps (list): Areas needing improvement
+            - recommendations (list): Specific action items
+        Returns None if API call fails
+        
+    Example:
+        >>> analysis = analyze_resume(resume_text, job_desc)
+        >>> print(f"ATS Score: {analysis['ats_alignment_score']}%")
+    """
     prompt = f"""You are an expert ATS (Applicant Tracking System) analyzer and resume coach. 
 Analyze the following resume against the job description and provide a comprehensive report.
 
@@ -104,18 +196,21 @@ Be specific and actionable. Focus on concrete skills, keywords, and experience m
     try:
         print("Calling OpenAI API...")
         response = client.chat.completions.create(
-            model="gpt-4",
+            model=OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": "You are an expert ATS analyzer and resume optimization specialist."},
+                {
+                    "role": "system",
+                    "content": "You are an expert ATS analyzer and resume optimization specialist."
+                },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3,
-            max_tokens=2000
+            temperature=ANALYSIS_TEMPERATURE,
+            max_tokens=ANALYSIS_MAX_TOKENS
         )
         
         result = response.choices[0].message.content.strip()
         
-        # Clean up markdown formatting
+        # Clean up markdown formatting that GPT-4 sometimes adds
         if result.startswith("```json"):
             result = result[7:]
         if result.startswith("```"):
@@ -130,9 +225,37 @@ Be specific and actionable. Focus on concrete skills, keywords, and experience m
         print(f"Error calling OpenAI API: {e}")
         return None
 
-def generate_optimized_resume(resume_text, job_description, analysis):
-    """Use GPT-4 to generate an optimized version of the resume"""
+
+def generate_optimized_resume(
+    resume_text: str,
+    job_description: str,
+    analysis: Dict[str, Any]
+) -> Optional[str]:
+    """
+    Generate an optimized version of the resume using GPT-4.
     
+    Uses analysis results to create an improved resume that better matches
+    the job description while maintaining authenticity. Incorporates missing
+    keywords naturally and strengthens existing bullet points.
+    
+    Args:
+        resume_text: Original resume content
+        job_description: Target job posting text
+        analysis: Analysis results from analyze_resume()
+        
+    Returns:
+        Optimized resume text, or None if generation fails
+        
+    Note:
+        The optimization maintains the original structure and does not
+        fabricate experience. All suggestions should be manually reviewed
+        before use.
+        
+    Example:
+        >>> optimized = generate_optimized_resume(resume, job_desc, analysis)
+        >>> with open("optimized_resume.txt", "w") as f:
+        >>>     f.write(optimized)
+    """
     prompt = f"""You are an expert resume writer. Based on the analysis below, rewrite this resume to better match the job description.
 
 ORIGINAL RESUME:
@@ -160,13 +283,16 @@ Return ONLY the optimized resume text, no explanations or preamble.
     try:
         print("Calling OpenAI API for resume optimization...")
         response = client.chat.completions.create(
-            model="gpt-4",
+            model=OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": "You are an expert resume writer who optimizes resumes for ATS systems while maintaining honesty and authenticity."},
+                {
+                    "role": "system",
+                    "content": "You are an expert resume writer who optimizes resumes for ATS systems while maintaining honesty and authenticity."
+                },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.5,
-            max_tokens=3000
+            temperature=OPTIMIZATION_TEMPERATURE,
+            max_tokens=OPTIMIZATION_MAX_TOKENS
         )
         
         return response.choices[0].message.content.strip()
@@ -175,9 +301,27 @@ Return ONLY the optimized resume text, no explanations or preamble.
         print(f"Error generating optimized resume: {e}")
         return None
 
-def format_analysis_report(analysis):
-    """Format the analysis into a readable report"""
+
+def format_analysis_report(analysis: Dict[str, Any]) -> str:
+    """
+    Format analysis results into a human-readable text report.
     
+    Converts the structured JSON analysis into a formatted report with
+    sections for ATS alignment, Boolean search analysis, keywords,
+    strengths, gaps, and recommendations.
+    
+    Args:
+        analysis: Analysis dictionary from analyze_resume()
+        
+    Returns:
+        Formatted report as string ready for display or file output
+        
+    Example:
+        >>> report = format_analysis_report(analysis)
+        >>> print(report)
+        >>> with open("analysis_report.txt", "w") as f:
+        >>>     f.write(report)
+    """
     report = f"""
 {'='*80}
 RESUME ANALYSIS REPORT
@@ -221,8 +365,22 @@ Boolean Match: Aim for 75-80% for recruiter visibility
 """
     return report
 
-def save_output(content, filename):
-    """Save content to a file"""
+
+def save_output(content: str, filename: str) -> None:
+    """
+    Save content to a file with UTF-8 encoding.
+    
+    Args:
+        content: Text content to write to file
+        filename: Path/name of output file
+        
+    Returns:
+        None
+        
+    Example:
+        >>> save_output(report, "analysis_report.txt")
+        ✓ Saved: analysis_report.txt
+    """
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -230,15 +388,35 @@ def save_output(content, filename):
     except Exception as e:
         print(f"Error saving file: {e}")
 
-def main():
-    """Main execution flow"""
+
+def main() -> None:
+    """
+    Main execution flow for the AI Resume Optimizer.
+    
+    Orchestrates the complete workflow:
+    1. Prompts user for resume file path
+    2. Reads and validates resume content
+    3. Prompts for job description
+    4. Calls GPT-4 for analysis
+    5. Displays and saves analysis report
+    6. Optionally generates optimized resume
+    
+    Returns:
+        None
+        
+    Example:
+        >>> python resume_optimizer.py
+        [Interactive prompts follow]
+    """
     print("=" * 80)
     print("AI RESUME OPTIMIZER")
     print("=" * 80)
     print()
     
     # Get resume
-    resume_file = input("Enter path to your resume file (.txt or .pdf, default: my_resume.pdf): ").strip()
+    resume_file = input(
+        "Enter path to your resume file (.txt or .pdf, default: my_resume.pdf): "
+    ).strip()
     if not resume_file:
         resume_file = "my_resume.pdf"
     
@@ -290,7 +468,11 @@ def main():
         print("\nGenerating optimized resume...")
         print("(This may take 30-60 seconds...)")
         
-        optimized_resume = generate_optimized_resume(resume_text, job_description, analysis)
+        optimized_resume = generate_optimized_resume(
+            resume_text,
+            job_description,
+            analysis
+        )
         
         if optimized_resume:
             print("✓ Optimized resume generated")
@@ -298,7 +480,7 @@ def main():
         else:
             print("Failed to generate optimized resume.")
     
-    # Update final output:
+    # Final output summary
     print("\n" + "=" * 80)
     print("COMPLETE!")
     print("=" * 80)
@@ -307,6 +489,7 @@ def main():
     if generate_opt == 'y':
         print("  • optimized_resume.txt - AI-optimized version of your resume")
     print()
+
 
 if __name__ == "__main__":
     main()
